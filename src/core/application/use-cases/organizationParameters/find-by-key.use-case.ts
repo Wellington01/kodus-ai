@@ -35,75 +35,11 @@ export class FindByKeyOrganizationParametersUseCase {
                 );
             }
 
-            // Processa configuração BYOK mascarando API keys
-            if (
-                organizationParametersKey ===
-                OrganizationParametersKey.BYOK_CONFIG
-            ) {
-                const configValue = parameter.configValue;
-
-                if (
-                    configValue &&
-                    typeof configValue === 'object' &&
-                    (configValue.main?.apiKey || configValue.fallback?.apiKey)
-                ) {
-                    try {
-                        const processedConfig = { ...configValue };
-
-                        // Processa main se existir e tiver apiKey
-                        if (configValue.main?.apiKey) {
-                            const decryptedMainApiKey = decrypt(
-                                configValue.main.apiKey,
-                            );
-                            const maskedMainApiKey =
-                                this.maskApiKey(decryptedMainApiKey);
-
-                            processedConfig.main = {
-                                ...configValue.main,
-                                apiKey: maskedMainApiKey,
-                            };
-                        } else {
-                            processedConfig.main = null;
-                        }
-
-                        if (configValue.fallback?.apiKey) {
-                            const decryptedFallbackApiKey = decrypt(
-                                configValue.fallback.apiKey,
-                            );
-                            const maskedFallbackApiKey = this.maskApiKey(
-                                decryptedFallbackApiKey,
-                            );
-
-                            processedConfig.fallback = {
-                                ...configValue.fallback,
-                                apiKey: maskedFallbackApiKey,
-                            };
-                        } else {
-                            processedConfig.fallback = null;
-                        }
-
-                        return {
-                            uuid: parameter.uuid,
-                            configKey: parameter.configKey,
-                            configValue: processedConfig,
-                            organization: parameter.organization,
-                        };
-                    } catch (error) {
-                        this.logger.error({
-                            message: 'Error decrypting API key',
-                            context:
-                                FindByKeyOrganizationParametersUseCase.name,
-                            error: error,
-                        });
-                        // Retorna o valor original em caso de erro na descriptografia
-                        return this.getUpdatedParameters(parameter);
-                    }
-                }
-            }
-
-            const updatedParameters = this.getUpdatedParameters(parameter);
-
-            return updatedParameters;
+            return this.buildResponse(
+                organizationParametersKey,
+                parameter,
+                organizationAndTeamData,
+            );
         } catch (error) {
             this.logger.error({
                 message: 'Error finding organization parameters by key',
@@ -119,6 +55,37 @@ export class FindByKeyOrganizationParametersUseCase {
         }
     }
 
+    private buildResponse(
+        organizationParametersKey: OrganizationParametersKey,
+        parameter: OrganizationParametersEntity,
+        organizationAndTeamData: OrganizationAndTeamData,
+    ): IOrganizationParameters {
+        if (
+            organizationParametersKey !==
+            OrganizationParametersKey.BYOK_CONFIG
+        ) {
+            return this.getUpdatedParameters(parameter);
+        }
+
+        try {
+            const maskedConfig = this.maskByokConfig(parameter.configValue);
+
+            return {
+                ...this.getUpdatedParameters(parameter),
+                configValue: maskedConfig,
+            };
+        } catch (error) {
+            this.logger.error({
+                message: 'Error decrypting API key',
+                context: FindByKeyOrganizationParametersUseCase.name,
+                error: error,
+                metadata: { organizationParametersKey, organizationAndTeamData },
+            });
+
+            return this.getUpdatedParameters(parameter);
+        }
+    }
+
     private getUpdatedParameters(parameter: OrganizationParametersEntity) {
         return {
             uuid: parameter.uuid,
@@ -126,6 +93,33 @@ export class FindByKeyOrganizationParametersUseCase {
             configValue: parameter.configValue,
             organization: parameter.organization,
         };
+    }
+
+    private maskByokConfig(configValue: any) {
+        const hasApiKey =
+            configValue?.main?.apiKey || configValue?.fallback?.apiKey;
+
+        if (!configValue || typeof configValue !== 'object' || !hasApiKey) {
+            return configValue;
+        }
+
+        const processedConfig = { ...configValue };
+
+        processedConfig.main = configValue.main?.apiKey
+            ? {
+                  ...configValue.main,
+                  apiKey: this.maskApiKey(decrypt(configValue.main.apiKey)),
+              }
+            : null;
+
+        processedConfig.fallback = configValue.fallback?.apiKey
+            ? {
+                  ...configValue.fallback,
+                  apiKey: this.maskApiKey(decrypt(configValue.fallback.apiKey)),
+              }
+            : null;
+
+        return processedConfig;
     }
 
     private maskApiKey(apiKey: string): string {

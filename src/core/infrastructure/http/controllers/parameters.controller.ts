@@ -8,6 +8,7 @@ import { UpdateOrCreateCodeReviewParameterUseCase } from '@/core/application/use
 import { ParametersKey } from '@/shared/domain/enums/parameters-key.enum';
 import {
     Body,
+    BadRequestException,
     Controller,
     Get,
     Inject,
@@ -47,6 +48,7 @@ import { REQUEST } from '@nestjs/core';
 import { UserRequest } from '@/config/types/http/user-request.type';
 import { UpdateOrCreateIssuesParameterBodyDto } from '../dtos/create-or-update-issues-parameter.dto';
 import { UpdateOrCreateIssuesParameterUseCase } from '@/core/application/use-cases/parameters/update-or-create-issues-parameter-use-case';
+import { FindParametersByKeyQueryDto } from '../dtos/find-parameters-by-key-query.dto';
 
 @Controller('parameters')
 export class ParametersController {
@@ -97,9 +99,14 @@ export class ParametersController {
         checkPermissions(Action.Read, ResourceType.CodeReviewSettings),
     )
     public async findByKey(
-        @Query('key') key: ParametersKey,
-        @Query('teamId') teamId: string,
+        @Query() query: FindParametersByKeyQueryDto,
     ) {
+        const { key, teamId } = query;
+
+        if (!teamId) {
+            throw new BadRequestException('teamId is required');
+        }
+
         return await this.findByKeyParametersUseCase.execute(key, { teamId });
     }
 

@@ -19,6 +19,7 @@ import {
 } from '@/core/application/use-cases/organizationParameters/get-cockpit-metrics-visibility.use-case';
 import { IgnoreBotsUseCase } from '@/core/application/use-cases/organizationParameters/ignore-bots.use-case';
 import { ICockpitMetricsVisibility } from '@/core/domain/organizationParameters/interfaces/cockpit-metrics-visibility.interface';
+import { FindOrganizationParametersByKeyQueryDto } from '../dtos/find-organization-parameters-by-key-query.dto';
 import {
     BadRequestException,
     Body,
@@ -79,9 +80,14 @@ export class OrgnizationParametersController {
         checkPermissions(Action.Read, ResourceType.OrganizationSettings),
     )
     public async findByKey(
-        @Query('key') key: OrganizationParametersKey,
-        @Query('organizationId') organizationId: string,
+        @Query() query: FindOrganizationParametersByKeyQueryDto,
     ) {
+        const { key, organizationId } = query;
+
+        if (!organizationId) {
+            throw new BadRequestException('organizationId is required');
+        }
+
         return await this.findByKeyOrganizationParametersUseCase.execute(key, {
             organizationId,
         });

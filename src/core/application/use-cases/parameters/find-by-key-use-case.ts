@@ -31,9 +31,7 @@ export class FindByKeyParametersUseCase {
                 throw new NotFoundException('Parameter config does not exist');
             }
 
-            const updatedParameters = this.getUpdatedParamaters(parameter);
-
-            return updatedParameters;
+            return this.mapParameter(parameter);
         } catch (error) {
             this.logger.error({
                 message: 'Error while fetching parameters by key',
@@ -46,61 +44,44 @@ export class FindByKeyParametersUseCase {
         }
     }
 
-    private getUpdatedParamaters<K extends ParametersKey>(
+    private mapParameter<K extends ParametersKey>(
         parameter: ParametersEntity<K>,
-    ) {
-        if (parameter.configKey === ParametersKey.CODE_REVIEW_CONFIG) {
-            /**
-             * TEMPORARY LOGIC: Show/hide code review version toggle based on user registration date
-             *
-             * Purpose: Gradually migrate users from legacy to v2 engine
-             * - Users registered BEFORE 2025-09-11: Can see version toggle (legacy + v2)
-             * - Users registered ON/AFTER 2025-09-11: Only see v2 (no toggle)
-             *
-             * This logic should be REMOVED after all clients migrate to v2 engine
-             * TODO: Remove this temporary logic after client migration completion
-             */
-            const cutoffYear = 2025;
-            const cutoffMonth = 8; // September (0-indexed)
-            const cutoffDay = 11;
+    ): IParameters<K> {
+        const normalizedParameter = parameter.toObject();
 
-            const paramYear = parameter.createdAt.getUTCFullYear();
-            const paramMonth = parameter.createdAt.getUTCMonth();
-            const paramDay = parameter.createdAt.getUTCDate();
-
-            const showToggleCodeReviewVersion =
-                paramYear < cutoffYear ||
-                (paramYear === cutoffYear && paramMonth < cutoffMonth) ||
-                (paramYear === cutoffYear &&
-                    paramMonth === cutoffMonth &&
-                    paramDay < cutoffDay);
-
-            return {
-                configKey: parameter.configKey,
-                configValue: {
-                    ...parameter.configValue,
-                    showToggleCodeReviewVersion,
-                },
-                team: parameter.team,
-                uuid: parameter.uuid,
-                createdAt: parameter.createdAt,
-                updatedAt: parameter.updatedAt,
-                active: parameter.active,
-                description: parameter.description,
-                version: parameter.version,
-            };
-        } else {
-            return {
-                configKey: parameter.configKey,
-                configValue: parameter.configValue,
-                team: parameter.team,
-                uuid: parameter.uuid,
-                active: parameter.active,
-                description: parameter.description,
-                version: parameter.version,
-                createdAt: parameter.createdAt,
-                updatedAt: parameter.updatedAt,
-            };
+        if (parameter.configKey !== ParametersKey.CODE_REVIEW_CONFIG) {
+            return normalizedParameter;
         }
+
+        return {
+            ...normalizedParameter,
+            configValue: {
+                ...normalizedParameter.configValue,
+                showToggleCodeReviewVersion:
+                    this.shouldShowCodeReviewVersionToggle(
+                        parameter.createdAt,
+                    ),
+            },
+        };
+    }
+
+    private shouldShowCodeReviewVersionToggle(createdAt?: Date): boolean {
+        if (!createdAt) {
+            return false;
+        }
+
+        /**
+         * TEMPORARY LOGIC: Show/hide code review version toggle based on user registration date
+         *
+         * Purpose: Gradually migrate users from legacy to v2 engine
+         * - Users registered BEFORE 2025-09-11: Can see version toggle (legacy + v2)
+         * - Users registered ON/AFTER 2025-09-11: Only see v2 (no toggle)
+         *
+         * This logic should be REMOVED after all clients migrate to v2 engine
+         * TODO: Remove this temporary logic after client migration completion
+         */
+        const cutoffDate = Date.UTC(2025, 8, 11); // September is 0-indexed
+
+        return createdAt.getTime() < cutoffDate;
     }
 }
